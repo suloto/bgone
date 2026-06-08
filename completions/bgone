@@ -1,0 +1,7 @@
+# bash-completion for `bgone`
+_bgone() {
+  local cur="${COMP_WORDS[COMP_CWORD]}"
+  _filedir -d                                   # directories (space-safe)
+  [ "$COMP_CWORD" -eq 1 ] && COMPREPLY+=( $(compgen -W "i p s b d" -- "$cur") )
+}
+complete -F _bgone bgone
