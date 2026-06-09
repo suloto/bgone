@@ -3,6 +3,17 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.3.0] - 2026-06-10
+### Added
+- **Output format choice** — pick `png` (default), `webp`, `jpg`, or `exr` in the
+  interactive flow (remembered like the other options). PNG/WebP/JPG via Pillow; EXR
+  (32-bit float RGBA, alpha preserved) via imageio — handy for VFX/compositing pipelines.
+  A quality prompt (1-100) appears for the lossy formats (jpg/webp). JPG has no
+  transparency, so it auto-composites onto the chosen background (white if you left it
+  transparent). Output extensions and the resume/skip + collision logic follow the format.
+- Installer pre-stages imageio's FreeImage backend so EXR works offline after install;
+  `imageio` is now pinned in `constraints.txt`.
+
 ## [0.2.0] - 2026-06-10
 ### Added
 - **GPU install path with auto-detection.** `BGONE_GPU=auto|cpu|gpu` selects the rembg

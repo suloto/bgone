@@ -61,6 +61,8 @@ CONSTRAINTS=""; [ -f "$HERE/constraints.txt" ] && CONSTRAINTS="-c $HERE/constrai
 "$PIP" install -q --no-cache-dir --upgrade pip
 # shellcheck disable=SC2086
 "$PIP" install -q --no-cache-dir $CONSTRAINTS "rembg[$EXTRAS]"
+# pre-stage imageio's FreeImage backend so EXR output works offline after install (best-effort)
+"$PREFIX/venv/bin/python" -c "import imageio; imageio.plugins.freeimage.download()" >/dev/null 2>&1 || true
 
 # ---- install the tool + supply-chain manifest --------------------------------
 install -m 755 "$HERE/bgone.sh"        "$PREFIX/bgone.sh"

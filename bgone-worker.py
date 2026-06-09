@@ -10,6 +10,8 @@ Env:
   NBG_STREAMS  images processed at once (threads)      [4]
   NBG_TRIM     "1" crop to the subject's bounding box  [0]
   NBG_BG       transparent | white | black | #RRGGBB   [transparent]
+  NBG_FMT      png | webp | jpg | exr                  [png]
+  NBG_QUALITY  1-100 quality for lossy jpg/webp        [90]
 """
 import os
 import sys
@@ -24,6 +26,13 @@ ALPHA   = os.environ.get("NBG_ALPHA", "0") == "1"
 WORKERS = max(1, int(os.environ.get("NBG_STREAMS", "4")))
 TRIM    = os.environ.get("NBG_TRIM", "0") == "1"
 BG      = os.environ.get("NBG_BG", "transparent").strip().lower()
+FMT     = os.environ.get("NBG_FMT", "png").strip().lower()
+if FMT == "jpeg":
+    FMT = "jpg"
+try:
+    QUALITY = max(1, min(100, int(os.environ.get("NBG_QUALITY", "90"))))
+except ValueError:
+    QUALITY = 90
 
 
 def _bg_rgba():
@@ -76,27 +85,44 @@ def _make_session():
 session = _make_session()
 
 
+def _encode(im, dst):
+    """Encode an RGBA (possibly opaque) PIL image to the chosen output format."""
+    if FMT == "webp":
+        im.save(dst, "WEBP", quality=QUALITY, lossless=(QUALITY >= 100), method=6)
+    elif FMT == "jpg":
+        im.convert("RGB").save(dst, "JPEG", quality=QUALITY)
+    elif FMT == "exr":
+        import numpy as np
+        import imageio.v3 as iio
+        iio.imwrite(dst, np.asarray(im).astype("float32") / 255.0)  # float RGBA, alpha kept
+    else:  # png
+        im.save(dst, "PNG")
+
+
 def process(pair):
     src, dst = pair
     with open(src, "rb") as fh:
         data = fh.read()
     out = remove(data, session=session, alpha_matting=ALPHA)
-    if TRIM or BGRGBA is not None:
-        im = Image.open(BytesIO(out)).convert("RGBA")
-        if TRIM:
-            bbox = im.getchannel("A").getbbox()   # tight box around non-transparent pixels
-            if bbox:
-                im = im.crop(bbox)
-        if BGRGBA is not None:
-            canvas = Image.new("RGBA", im.size, BGRGBA)
-            canvas.alpha_composite(im)
-            im = canvas.convert("RGB")            # flatten onto solid bg
-        buf = BytesIO()
-        im.save(buf, "PNG")
-        out = buf.getvalue()
     os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
-    with open(dst, "wb") as fh:
-        fh.write(out)
+    # fast path: plain PNG with no trim/bg edits -> write rembg's bytes verbatim
+    if FMT == "png" and not TRIM and BGRGBA is None:
+        with open(dst, "wb") as fh:
+            fh.write(out)
+        return os.path.splitext(os.path.basename(src))[0]
+    im = Image.open(BytesIO(out)).convert("RGBA")
+    if TRIM:
+        bbox = im.getchannel("A").getbbox()       # tight box around non-transparent pixels
+        if bbox:
+            im = im.crop(bbox)
+    bg = BGRGBA
+    if FMT == "jpg" and bg is None:
+        bg = (255, 255, 255, 255)                 # JPEG has no alpha -> must flatten
+    if bg is not None:
+        canvas = Image.new("RGBA", im.size, bg)
+        canvas.alpha_composite(im)
+        im = canvas
+    _encode(im, dst)
     return os.path.splitext(os.path.basename(src))[0]
 
 

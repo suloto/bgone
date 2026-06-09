@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.2.0"
+VERSION="0.3.0"
 
 B=$'\033[1m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; Rd=$'\033[1;31m'; Dim=$'\033[2m'; Z=$'\033[0m'
 title(){ printf '\n%s%s%s\n' "$G" "$1" "$Z"; }
@@ -77,6 +77,7 @@ PYTHON="$(dirname "$REMBG")/python"; [ -x "$PYTHON" ] || PYTHON="python3"
 # ---- remembered defaults -------------------------------------------------
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/bgone/config"
 CFG_MODEL=2; CFG_STREAMS=4; CFG_ALPHA=off; CFG_TRIM=off; CFG_BG=transparent; CFG_SKIP=on
+CFG_FMT=png; CFG_QUALITY=90
 # shellcheck source=/dev/null
 [ -f "$CFG" ] && . "$CFG" 2>/dev/null || true
 
@@ -157,6 +158,16 @@ td="[y/N]"; [ "$CFG_TRIM" = on ] && td="[Y/n]"
 IFS= read -rp "Trim to content? (crop transparent margins) $td: " t
 TRIM="$CFG_TRIM"; [[ "$t" =~ ^[Yy] ]] && TRIM=on; [[ "$t" =~ ^[Nn] ]] && TRIM=off
 
+IFS= read -rp "Output format — png / webp / jpg / exr [${CFG_FMT}]: " fmtin
+FMT="${fmtin:-$CFG_FMT}"; FMT="${FMT,,}"; [ "$FMT" = jpeg ] && FMT=jpg
+case "$FMT" in png|webp|jpg|exr) ;; *) FMT=png ;; esac
+[ "$FMT" = exr ] && { "$PYTHON" -c "import imageio.v3" 2>/dev/null || die "EXR output needs imageio — re-run install.sh."; }
+QUALITY="$CFG_QUALITY"
+if [ "$FMT" = jpg ] || [ "$FMT" = webp ]; then
+  IFS= read -rp "Quality 1-100 [${CFG_QUALITY}]: " qin; QUALITY="${qin:-$CFG_QUALITY}"
+  [[ "$QUALITY" =~ ^[0-9]+$ ]] && [ "$QUALITY" -ge 1 ] && [ "$QUALITY" -le 100 ] || QUALITY="$CFG_QUALITY"
+fi
+
 IFS= read -rp "Background — transparent / white / #hex [${CFG_BG}]: " bgin
 BG="${bgin:-$CFG_BG}"
 case "$BG" in
@@ -164,6 +175,9 @@ case "$BG" in
   \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
   *) BG=transparent ;;
 esac
+if [ "$FMT" = jpg ] && [ "$BG" = transparent ]; then
+  BG=white; printf '%s(jpg has no transparency — compositing on white)%s\n' "$Dim" "$Z"
+fi
 
 sd="[Y/n]"; [ "$CFG_SKIP" = off ] && sd="[y/N]"
 IFS= read -rp "Skip files already done (resume)? $sd: " s
@@ -186,7 +200,8 @@ THREADS=$(( NPROC / STREAMS )); [ "$THREADS" -lt 1 ] && THREADS=1
 # ---- remember choices ----------------------------------------------------
 if mkdir -p "$(dirname "$CFG")" 2>/dev/null; then
   { echo "CFG_MODEL=$mi"; echo "CFG_STREAMS=$STREAMS"; echo "CFG_ALPHA=$ALPHA"
-    echo "CFG_TRIM=$TRIM"; echo "CFG_BG=$BG"; echo "CFG_SKIP=$SKIP"; } > "$CFG" 2>/dev/null || true
+    echo "CFG_TRIM=$TRIM"; echo "CFG_BG=$BG"; echo "CFG_SKIP=$SKIP"
+    echo "CFG_FMT=$FMT"; echo "CFG_QUALITY=$QUALITY"; } > "$CFG" 2>/dev/null || true
 fi
 
 # ---- build work list (each FOLDER -> '<name> _bgone' sibling) ------------
@@ -195,9 +210,9 @@ depth=1; [ "$RECURSE" = on ] && depth=999
 for SRC in "${SRCS[@]}"; do
   OUT="${SRC} _bgone"; OUTS+=( "$OUT" )
   while IFS= read -r f; do
-    found=$((found+1)); rel="${f#"$SRC"/}"; out="$OUT/${rel%.*}.png"
+    found=$((found+1)); rel="${f#"$SRC"/}"; out="$OUT/${rel%.*}.$FMT"
     # disambiguate same-name/different-ext collisions (e.g. photo.jpg + photo.png -> keep both)
-    [ -n "${usedout["$out"]:-}" ] && out="$OUT/${rel}.png"
+    [ -n "${usedout["$out"]:-}" ] && out="$OUT/${rel}.$FMT"
     usedout["$out"]=1
     if [ "$SKIP" = on ] && [ -f "$out" ]; then skipped=$((skipped+1)); continue; fi
     PAIRS+=( "$f" "$out" )
@@ -209,14 +224,15 @@ todo=$(( ${#PAIRS[@]} / 2 ))
 
 # ---- confirm -------------------------------------------------------------
 title "Ready"
-printf '  folders : %d   recurse : %s   model : %s\n  alpha : %s   trim : %s   bg : %s   streams : %s\n  found : %d   skip : %d   to do : %d\n' \
-  "${#SRCS[@]}" "$RECURSE" "$MODEL" "$ALPHA" "$TRIM" "$BG" "$STREAMS" "$found" "$skipped" "$todo"
+fmtlabel="$FMT"; { [ "$FMT" = jpg ] || [ "$FMT" = webp ]; } && fmtlabel="$FMT q$QUALITY"
+printf '  folders : %d   recurse : %s   model : %s   format : %s\n  alpha : %s   trim : %s   bg : %s   streams : %s\n  found : %d   skip : %d   to do : %d\n' \
+  "${#SRCS[@]}" "$RECURSE" "$MODEL" "$fmtlabel" "$ALPHA" "$TRIM" "$BG" "$STREAMS" "$found" "$skipped" "$todo"
 IFS= read -rp "Start? [Y/n]: " go; [[ "$go" =~ ^[Nn] ]] && { echo "Cancelled."; exit 1; }
 
 # ---- process (load model ONCE, parallel; live bar w/ rate + ETA) ---------
 total=$todo
 LOG="$(mktemp 2>/dev/null || echo "/tmp/bgone.$$.log")"
-export NBG_MODEL="$MODEL" NBG_STREAMS="$STREAMS" NBG_BG="$BG"
+export NBG_MODEL="$MODEL" NBG_STREAMS="$STREAMS" NBG_BG="$BG" NBG_FMT="$FMT" NBG_QUALITY="$QUALITY"
 export NBG_ALPHA="$([ "$ALPHA" = on ] && echo 1 || echo 0)" NBG_TRIM="$([ "$TRIM" = on ] && echo 1 || echo 0)"
 bar(){ local d=$1 cols w pct fill i b=''
   cols=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")

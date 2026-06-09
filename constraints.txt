@@ -8,3 +8,4 @@ onnxruntime==1.26.0
 onnxruntime-gpu==1.26.0
 numpy==2.4.6
 pillow==12.2.0
+imageio==2.37.3
