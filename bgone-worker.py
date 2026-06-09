@@ -47,18 +47,30 @@ BGRGBA = _bg_rgba()
 def _make_session():
     # GPU-ready: prefer a hardware execution provider if onnxruntime exposes one
     # (CUDA/ROCm/OpenVINO/DirectML), else fall back to CPU. No-op on CPU-only boxes.
+    requested, sess = None, None
     try:
         import onnxruntime as ort
         avail = ort.get_available_providers()
         prefer = [p for p in ("CUDAExecutionProvider", "ROCMExecutionProvider",
                               "OpenVINOExecutionProvider", "DmlExecutionProvider")
                   if p in avail]
+        requested = prefer[0] if prefer else "CPUExecutionProvider"
         try:
-            return new_session(MODEL, providers=prefer + ["CPUExecutionProvider"])
+            sess = new_session(MODEL, providers=prefer + ["CPUExecutionProvider"])
         except TypeError:
-            return new_session(MODEL)
+            sess = new_session(MODEL)
+    except Exception as e:
+        print("bgone: provider detection error (%s); using default" % e, file=sys.stderr, flush=True)
+    if sess is None:
+        sess = new_session(MODEL)
+    # report the actually-active provider so fleet operators can confirm GPU vs CPU
+    active = requested or "CPUExecutionProvider"
+    try:
+        active = sess.inner_session.get_providers()[0]
     except Exception:
-        return new_session(MODEL)
+        pass
+    print("bgone: execution provider = %s" % active, file=sys.stderr, flush=True)
+    return sess
 
 
 session = _make_session()

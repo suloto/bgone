@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes to bgone are documented here.
+Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
+
+## [0.2.0] - 2026-06-10
+### Added
+- **GPU install path with auto-detection.** `BGONE_GPU=auto|cpu|gpu` selects the rembg
+  backend; `auto` (default) installs the GPU runtime when an NVIDIA GPU is detected and
+  falls back to CPU otherwise. The worker now prints the ONNX execution provider it
+  actually uses, so fleet operators can confirm GPU vs CPU per machine.
+- **`bgone --verify-models`** — checks cached model weights against a shipped SHA-256
+  manifest (`models.sha256`). Supply-chain integrity check for fleet deployments.
+- **Reproducible installs.** Dependency versions are pinned via `constraints.txt`
+  (rembg, onnxruntime, numpy, Pillow) so every workstation runs identical, vetted packages.
+- `--help`/`--version`/`--verify-models` now work **without** the rembg runtime installed.
+
+### Changed
+- Installer is **idempotent / upgrade-in-place**, preflights `python3-venv`/`ensurepip`
+  with a clear error, and **refuses to clobber** an unrelated `/usr/local/bin/bgone`
+  unless `BGONE_FORCE=1`.
+- CI now also shellchecks `uninstall.sh`, enforces VERSION/CHANGELOG consistency, and
+  smoke-tests that `--version`/`--help` run with no runtime present.
+
+## [0.1.0] - 2026-06-08
+### Added
+- Initial release: pure-terminal batch background remover built on
+  [rembg](https://github.com/danielgatis/rembg). Bulk multi-folder select with image
+  counts, recurse, 5-model menu, alpha matting, trim-to-content, background
+  (transparent/white/black/#hex), resume/skip, remembered settings, per-folder `_bgone`
+  output with collision disambiguation, parallel "streams" (load model once), live
+  progress bar with throughput + ETA, tab-completion, install/uninstall scripts, CI.

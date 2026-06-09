@@ -10,44 +10,69 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.1.0"
-
-# ---- locate ourselves, rembg, and the venv python -----------------------
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-BGONE_HOME="${BGONE_HOME:-$HERE}"
-WORKER="$BGONE_HOME/bgone-worker.py"; [ -f "$WORKER" ] || WORKER="/opt/rembg/bgone-worker.py"
-if   [ -x "$BGONE_HOME/venv/bin/rembg" ]; then REMBG="$BGONE_HOME/venv/bin/rembg"
-elif [ -x /opt/rembg/venv/bin/rembg ];    then REMBG=/opt/rembg/venv/bin/rembg
-elif command -v rembg >/dev/null 2>&1;    then REMBG="$(command -v rembg)"
-else echo "Cannot find rembg — install it (pip install rembg) or set BGONE_HOME." >&2; exit 1; fi
-PYTHON="$(dirname "$REMBG")/python"; [ -x "$PYTHON" ] || PYTHON="python3"
-MODELDIR="${U2NET_HOME:-$BGONE_HOME/models}"        # default: shared cache next to the install
-mkdir -p "$MODELDIR" 2>/dev/null || true
-[ -w "$MODELDIR" ] || MODELDIR="${HOME:-/root}/.u2net"  # fall back to ~/.u2net if not writable
-export U2NET_HOME="$MODELDIR"                        # so the worker + rembg passthrough agree
+VERSION="0.2.0"
 
 B=$'\033[1m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; Rd=$'\033[1;31m'; Dim=$'\033[2m'; Z=$'\033[0m'
 title(){ printf '\n%s%s%s\n' "$G" "$1" "$Z"; }
 die(){ printf '%s%s%s\n' "$Rd" "$1" "$Z" >&2; exit 1; }
 
+# ---- locate ourselves + the shared model cache (no runtime deps yet) -----
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+BGONE_HOME="${BGONE_HOME:-$HERE}"
+WORKER="$BGONE_HOME/bgone-worker.py"
+[ -f "$WORKER" ] || WORKER="/opt/bgone/bgone-worker.py"
+[ -f "$WORKER" ] || WORKER="/opt/rembg/bgone-worker.py"   # legacy path
+MODELDIR="${U2NET_HOME:-$BGONE_HOME/models}"        # default: shared cache next to the install
+mkdir -p "$MODELDIR" 2>/dev/null || true
+[ -w "$MODELDIR" ] || MODELDIR="${HOME:-/root}/.u2net"  # fall back to ~/.u2net if not writable
+export U2NET_HOME="$MODELDIR"                        # so the worker + rembg passthrough agree
+
+# ---- commands that must work WITHOUT the rembg runtime -------------------
 case "${1:-}" in
   -h|--help)
     cat <<EOF
 bgone $VERSION — batch background remover (built on rembg)
 
-  bgone                 interactive: pick folder(s), model, options
-  bgone DIR [DIR ...]   process these folder(s) directly
-  bgone -h | --help     this help
-  bgone -V | --version  version
+  bgone                  interactive: pick folder(s), model, options
+  bgone DIR [DIR ...]    process these folder(s) directly
+  bgone --verify-models  check cached model weights vs the shipped SHA-256 manifest
+  bgone -h | --help      this help
+  bgone -V | --version   version
 
 Each source FOLDER's images are written to a sibling "FOLDER _bgone".
 Interactive options: recurse subfolders, model, alpha matting, trim-to-content,
-background (transparent/white/#hex), resume-skip, parallel streams. Your last
+background (transparent/white/black/#hex), resume-skip, parallel streams. Your last
 choices are remembered in \${XDG_CONFIG_HOME:-\$HOME/.config}/bgone/config.
+Env: U2NET_HOME (model cache dir), BGONE_HOME (install dir).
 EOF
     exit 0 ;;
   -V|--version) echo "bgone $VERSION"; exit 0 ;;
+  --verify-models)
+    MAN="$BGONE_HOME/models.sha256"; [ -f "$MAN" ] || MAN="/opt/bgone/models.sha256"
+    [ -f "$MAN" ] || die "Checksum manifest not found (looked in $BGONE_HOME and /opt/bgone)."
+    echo "Verifying models in $MODELDIR against $MAN"
+    rc=0; present=0
+    while read -r want name; do
+      [ -n "${name:-}" ] || continue
+      f="$MODELDIR/$name"
+      if [ ! -f "$f" ]; then printf '  %s·%s %s (not downloaded yet)\n' "$Dim" "$Z" "$name"; continue; fi
+      present=$((present+1))
+      got="$(sha256sum "$f" 2>/dev/null | awk '{print $1}')"
+      if [ "$got" = "$want" ]; then printf '  %sOK%s       %s\n' "$G" "$Z" "$name"
+      else printf '  %sMISMATCH%s %s\n' "$Rd" "$Z" "$name"; rc=1; fi
+    done < "$MAN"
+    if [ "$rc" -ne 0 ]; then printf '%sWARNING: a model failed checksum — possibly corrupt or tampered.%s\n' "$Rd" "$Z" >&2
+    else echo "Verified $present present model(s); no mismatches."; fi
+    exit "$rc" ;;
 esac
+
+# ---- locate the rembg runtime (required for processing from here on) -----
+if   [ -x "$BGONE_HOME/venv/bin/rembg" ]; then REMBG="$BGONE_HOME/venv/bin/rembg"
+elif [ -x /opt/bgone/venv/bin/rembg ];    then REMBG=/opt/bgone/venv/bin/rembg
+elif [ -x /opt/rembg/venv/bin/rembg ];    then REMBG=/opt/rembg/venv/bin/rembg
+elif command -v rembg >/dev/null 2>&1;    then REMBG="$(command -v rembg)"
+else die "Cannot find rembg — run install.sh, or set BGONE_HOME to your install dir."; fi
+PYTHON="$(dirname "$REMBG")/python"; [ -x "$PYTHON" ] || PYTHON="python3"
 
 # ---- remembered defaults -------------------------------------------------
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/bgone/config"

@@ -1,0 +1,10 @@
+# Pinned dependency versions for FLEET REPRODUCIBILITY — every workstation that
+# runs install.sh gets identical, known-good versions of the packages that affect
+# bgone's behaviour/output. Used via `pip install -c constraints.txt`.
+# Regenerate deliberately after a vetted rembg bump (and note it in CHANGELOG.md):
+#   /opt/bgone/venv/bin/pip freeze | grep -iE '^(rembg|onnxruntime|numpy|pillow)'
+rembg==2.0.76
+onnxruntime==1.26.0
+onnxruntime-gpu==1.26.0
+numpy==2.4.6
+pillow==12.2.0

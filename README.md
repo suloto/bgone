@@ -37,13 +37,18 @@ sudo ./install.sh                 # installs to /opt/bgone
 # or pick a location:
 sudo PREFIX=/opt/myplace ./install.sh
 ```
-Creates a Python venv (`pip install "rembg[cpu,cli]"`), drops in the tool, and registers the `bgone` command + bash completion.
+Creates a Python venv, installs `rembg` (versions pinned via `constraints.txt`), drops in the tool, and registers the `bgone` command + bash completion. The installer is **idempotent** (re-run it to upgrade in place) and **won't overwrite** an unrelated `/usr/local/bin/bgone` unless you pass `BGONE_FORCE=1`.
+
+**GPU:** the installer **auto-detects** an NVIDIA GPU and installs the GPU runtime, else CPU. Force it with `sudo BGONE_GPU=gpu ./install.sh` (or `BGONE_GPU=cpu`). At runtime bgone prints which ONNX execution provider it actually used, so you can confirm GPU vs CPU per machine.
+
+**Fleet / production:** versions are pinned in `constraints.txt` so every workstation runs identical, vetted packages, and you can verify model-weight integrity on any machine with `bgone --verify-models` (checks the cached `.onnx` files against the shipped `models.sha256`).
 
 ## Usage
 ```bash
 bgone                    # interactive: pick folders, model, options
 bgone /path/to/images    # run directly on one or more folders
 bgone i in.png out.png   # passthrough to the underlying rembg CLI
+bgone --verify-models    # check cached model weights vs the shipped checksums
 bgone --help
 ```
 
