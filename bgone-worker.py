@@ -10,8 +10,8 @@ Env:
   NBG_STREAMS  images processed at once (threads)      [4]
   NBG_TRIM     "1" crop to the subject's bounding box  [0]
   NBG_BG       transparent | white | black | #RRGGBB   [transparent]
-  NBG_FMT      png | webp | jpg | exr                  [png]
-  NBG_QUALITY  1-100 quality for lossy jpg/webp        [90]
+  NBG_FMT      png webp jpg tiff tga bmp avif jp2 dds exr hdr dpx  [png]
+  NBG_QUALITY  1-100 quality for lossy jpg/webp/avif   [90]
 """
 import os
 import sys
@@ -27,12 +27,17 @@ WORKERS = max(1, int(os.environ.get("NBG_STREAMS", "4")))
 TRIM    = os.environ.get("NBG_TRIM", "0") == "1"
 BG      = os.environ.get("NBG_BG", "transparent").strip().lower()
 FMT     = os.environ.get("NBG_FMT", "png").strip().lower()
-if FMT == "jpeg":
-    FMT = "jpg"
+FMT     = {"jpeg": "jpg", "tif": "tiff", "j2k": "jp2", "jpeg2000": "jp2"}.get(FMT, FMT)
 try:
     QUALITY = max(1, min(100, int(os.environ.get("NBG_QUALITY", "90"))))
 except ValueError:
     QUALITY = 90
+
+_PIL_FMT = {"png": "PNG", "webp": "WEBP", "jpg": "JPEG", "tiff": "TIFF", "tga": "TGA",
+            "bmp": "BMP", "avif": "AVIF", "jp2": "JPEG2000", "dds": "DDS"}
+_IMAGEIO = {"exr", "hdr", "dpx"}            # written via imageio (VFX/film)
+_FLOAT   = {"exr", "hdr"}                   # written as 32-bit float
+_FLATTEN = {"jpg", "bmp", "hdr", "dpx"}     # formats with no alpha channel
 
 
 def _bg_rgba():
@@ -86,17 +91,22 @@ session = _make_session()
 
 
 def _encode(im, dst):
-    """Encode an RGBA (possibly opaque) PIL image to the chosen output format."""
-    if FMT == "webp":
-        im.save(dst, "WEBP", quality=QUALITY, lossless=(QUALITY >= 100), method=6)
-    elif FMT == "jpg":
-        im.convert("RGB").save(dst, "JPEG", quality=QUALITY)
-    elif FMT == "exr":
+    """Encode an RGBA (or RGB, if flattened) PIL image to the chosen output format."""
+    if FMT in _IMAGEIO:
         import numpy as np
         import imageio.v3 as iio
-        iio.imwrite(dst, np.asarray(im).astype("float32") / 255.0)  # float RGBA, alpha kept
-    else:  # png
-        im.save(dst, "PNG")
+        arr = np.asarray(im)
+        if FMT in _FLOAT:
+            arr = arr.astype("float32") / 255.0   # exr/hdr: 32-bit float
+        iio.imwrite(dst, arr)
+        return
+    pf = _PIL_FMT.get(FMT, "PNG")
+    if FMT == "webp":
+        im.save(dst, pf, quality=QUALITY, lossless=(QUALITY >= 100), method=6)
+    elif FMT in ("jpg", "avif"):
+        im.save(dst, pf, quality=QUALITY)
+    else:                                          # png/tiff/tga/bmp/jp2/dds (lossless)
+        im.save(dst, pf)
 
 
 def process(pair):
@@ -116,12 +126,14 @@ def process(pair):
         if bbox:
             im = im.crop(bbox)
     bg = BGRGBA
-    if FMT == "jpg" and bg is None:
-        bg = (255, 255, 255, 255)                 # JPEG has no alpha -> must flatten
+    if FMT in _FLATTEN and bg is None:
+        bg = (255, 255, 255, 255)                 # no alpha channel -> must flatten
     if bg is not None:
         canvas = Image.new("RGBA", im.size, bg)
         canvas.alpha_composite(im)
         im = canvas
+    if FMT in _FLATTEN:
+        im = im.convert("RGB")
     _encode(im, dst)
     return os.path.splitext(os.path.basename(src))[0]
 

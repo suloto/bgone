@@ -3,6 +3,14 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.4.0] - 2026-06-10
+### Added
+- **Expanded export formats for VFX/editing.** Beyond png/webp/jpg, the format menu now
+  offers **tiff, tga, dds, jp2, avif** (alpha preserved), **bmp** (flat), and float/film
+  formats **exr, hdr, dpx** (via imageio). Alpha-capable formats keep the cutout's
+  transparency; the rest auto-composite onto the background. The quality prompt covers
+  jpg/webp/avif. Aliases accepted: jpeg→jpg, tif→tiff, j2k/jpeg2000→jp2.
+
 ## [0.3.0] - 2026-06-10
 ### Added
 - **Output format choice** — pick `png` (default), `webp`, `jpg`, or `exr` in the

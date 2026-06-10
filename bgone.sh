@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.3.0"
+VERSION="0.4.0"
 
 B=$'\033[1m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; Rd=$'\033[1;31m'; Dim=$'\033[2m'; Z=$'\033[0m'
 title(){ printf '\n%s%s%s\n' "$G" "$1" "$Z"; }
@@ -158,15 +158,20 @@ td="[y/N]"; [ "$CFG_TRIM" = on ] && td="[Y/n]"
 IFS= read -rp "Trim to content? (crop transparent margins) $td: " t
 TRIM="$CFG_TRIM"; [[ "$t" =~ ^[Yy] ]] && TRIM=on; [[ "$t" =~ ^[Nn] ]] && TRIM=off
 
-IFS= read -rp "Output format — png / webp / jpg / exr [${CFG_FMT}]: " fmtin
-FMT="${fmtin:-$CFG_FMT}"; FMT="${FMT,,}"; [ "$FMT" = jpeg ] && FMT=jpg
-case "$FMT" in png|webp|jpg|exr) ;; *) FMT=png ;; esac
-[ "$FMT" = exr ] && { "$PYTHON" -c "import imageio.v3" 2>/dev/null || die "EXR output needs imageio — re-run install.sh."; }
+printf '%sFormats:%s alpha = png webp tiff tga dds jp2 avif · flat = jpg bmp · float/VFX = exr hdr dpx\n' "$Dim" "$Z"
+IFS= read -rp "Output format [${CFG_FMT}]: " fmtin
+FMT="${fmtin:-$CFG_FMT}"; FMT="${FMT,,}"
+case "$FMT" in jpeg) FMT=jpg ;; tif) FMT=tiff ;; j2k|jpeg2000) FMT=jp2 ;; esac
+case "$FMT" in png|webp|jpg|tiff|tga|bmp|avif|jp2|dds|exr|hdr|dpx) ;; *) FMT=png ;; esac
+case "$FMT" in
+  exr|hdr|dpx) "$PYTHON" -c "import imageio.v3" 2>/dev/null || die "$FMT output needs imageio — re-run install.sh." ;;
+esac
 QUALITY="$CFG_QUALITY"
-if [ "$FMT" = jpg ] || [ "$FMT" = webp ]; then
-  IFS= read -rp "Quality 1-100 [${CFG_QUALITY}]: " qin; QUALITY="${qin:-$CFG_QUALITY}"
-  [[ "$QUALITY" =~ ^[0-9]+$ ]] && [ "$QUALITY" -ge 1 ] && [ "$QUALITY" -le 100 ] || QUALITY="$CFG_QUALITY"
-fi
+case "$FMT" in
+  jpg|webp|avif)
+    IFS= read -rp "Quality 1-100 [${CFG_QUALITY}]: " qin; QUALITY="${qin:-$CFG_QUALITY}"
+    [[ "$QUALITY" =~ ^[0-9]+$ ]] && [ "$QUALITY" -ge 1 ] && [ "$QUALITY" -le 100 ] || QUALITY="$CFG_QUALITY" ;;
+esac
 
 IFS= read -rp "Background — transparent / white / #hex [${CFG_BG}]: " bgin
 BG="${bgin:-$CFG_BG}"
@@ -175,9 +180,9 @@ case "$BG" in
   \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
   *) BG=transparent ;;
 esac
-if [ "$FMT" = jpg ] && [ "$BG" = transparent ]; then
-  BG=white; printf '%s(jpg has no transparency — compositing on white)%s\n' "$Dim" "$Z"
-fi
+case "$FMT" in
+  jpg|bmp|hdr|dpx) [ "$BG" = transparent ] && { BG=white; printf '%s(%s has no alpha — compositing on white)%s\n' "$Dim" "$FMT" "$Z"; } ;;
+esac
 
 sd="[Y/n]"; [ "$CFG_SKIP" = off ] && sd="[y/N]"
 IFS= read -rp "Skip files already done (resume)? $sd: " s
@@ -224,7 +229,7 @@ todo=$(( ${#PAIRS[@]} / 2 ))
 
 # ---- confirm -------------------------------------------------------------
 title "Ready"
-fmtlabel="$FMT"; { [ "$FMT" = jpg ] || [ "$FMT" = webp ]; } && fmtlabel="$FMT q$QUALITY"
+fmtlabel="$FMT"; case "$FMT" in jpg|webp|avif) fmtlabel="$FMT q$QUALITY" ;; esac
 printf '  folders : %d   recurse : %s   model : %s   format : %s\n  alpha : %s   trim : %s   bg : %s   streams : %s\n  found : %d   skip : %d   to do : %d\n' \
   "${#SRCS[@]}" "$RECURSE" "$MODEL" "$fmtlabel" "$ALPHA" "$TRIM" "$BG" "$STREAMS" "$found" "$skipped" "$todo"
 IFS= read -rp "Start? [Y/n]: " go; [[ "$go" =~ ^[Nn] ]] && { echo "Cancelled."; exit 1; }

@@ -24,7 +24,7 @@ Point it at folders of images and it strips their backgrounds to transparent PNG
 - **Loads the model once** and processes N images in parallel ("streams") — one model in RAM
 - **Trim to content** — crop each cutout to the subject's bounding box
 - **Background** — keep it transparent, or composite onto white / black / a custom `#hex`
-- **Output format** — write `png` (default), `webp`, `jpg`, or `exr` (32-bit float RGBA, for VFX/compositing), with a quality knob for the lossy formats
+- **Output formats** — `png` (default) plus alpha-capable `webp` `tiff` `tga` `dds` `jp2` `avif`, flat `jpg` `bmp`, and float/film `exr` `hdr` `dpx` (VFX/compositing); quality knob for the lossy ones
 - **Live progress** — bar with throughput + ETA, plus a pass/fail summary
 - **Remembers your last settings** (model, streams, options)
 - **Tab-completion** for the `bgone` command and the folder prompt
