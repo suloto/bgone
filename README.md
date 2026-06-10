@@ -5,7 +5,10 @@
 A friendly, **pure-terminal** batch background remover — built on
 [rembg](https://github.com/danielgatis/rembg).
 
-Point it at folders of images and it strips their backgrounds to transparent PNGs.
+Point it at folders of images and it strips their backgrounds — keep them transparent or
+composite onto a color — and writes the cutouts to a sibling `FOLDER_bgone` in your choice
+of format (PNG, WebP, JPG, TIFF, EXR, and more). It loads the model once and processes
+many images in parallel, picks up a GPU when there is one, and resumes where it left off.
 
 ![before and after](docs/before-after.png)
 
