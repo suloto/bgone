@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.5.1"
+VERSION="0.6.0"
 
 # presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -48,7 +48,8 @@ bgone $VERSION — batch background remover (built on rembg)
   bgone -h | --help      this help
   bgone -V | --version   version
 
-Each source FOLDER's images are written to a sibling "FOLDER_bgone".
+Each source FOLDER's images go to a sibling "FOLDER_bgone"; output folder + file
+names are sanitised to be terminal-friendly (spaces/specials -> _).
 Interactive options: recurse subfolders, model, alpha matting, trim-to-content,
 background (transparent/white/black/#hex), resume-skip, parallel streams. Your last
 choices are remembered in \${XDG_CONFIG_HOME:-\$HOME/.config}/bgone/config.
@@ -219,14 +220,24 @@ if mkdir -p "$(dirname "$CFG")" 2>/dev/null; then
 fi
 
 # ---- build work list (each FOLDER -> '<name>_bgone' sibling) -------------
+# Output folder + file names are sanitised to be terminal-friendly: only
+# [A-Za-z0-9._-] survive, runs of anything else collapse to a single '_'.
 PAIRS=(); OUTS=(); found=0; skipped=0; declare -A usedout=()
 depth=1; [ "$RECURSE" = on ] && depth=999
 for SRC in "${SRCS[@]}"; do
-  OUT="${SRC}_bgone"; OUTS+=( "$OUT" )
+  ob="${SRC##*/}"; ob="${ob//[!A-Za-z0-9._-]/_}"          # terminal-safe output folder name
+  while [[ "$ob" == *__* ]]; do ob="${ob//__/_}"; done; ob="${ob#_}"; ob="${ob%_}"
+  OUT="${SRC%/*}/${ob:-x}_bgone"; OUTS+=( "$OUT" )
   while IFS= read -r f; do
-    found=$((found+1)); rel="${f#"$SRC"/}"; out="$OUT/${rel%.*}.$FMT"
-    # disambiguate same-name/different-ext collisions (e.g. photo.jpg + photo.png -> keep both)
-    [ -n "${usedout["$out"]:-}" ] && out="$OUT/${rel}.$FMT"
+    found=$((found+1)); rel="${f#"$SRC"/}"; stem="${rel%.*}"; ext="${rel##*.}"
+    san=""; IFS='/' read -ra _seg <<< "$stem"            # sanitise each path segment (keeps subfolders on recurse)
+    for s in "${_seg[@]}"; do
+      s="${s//[!A-Za-z0-9._-]/_}"; while [[ "$s" == *__* ]]; do s="${s//__/_}"; done
+      s="${s#_}"; s="${s%_}"; san="${san:+$san/}${s:-x}"
+    done
+    san="${san:-x}"; out="$OUT/$san.$FMT"
+    # disambiguate clashes (e.g. 'a b.jpg' + 'a-b.png' -> same name) by keeping the ext
+    [ -n "${usedout["$out"]:-}" ] && out="$OUT/$san.${ext//[!A-Za-z0-9]/_}.$FMT"
     usedout["$out"]=1
     if [ "$SKIP" = on ] && [ -f "$out" ]; then skipped=$((skipped+1)); continue; fi
     PAIRS+=( "$f" "$out" )

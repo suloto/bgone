@@ -3,6 +3,13 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.6.0] - 2026-06-10
+### Changed
+- Output folder **and** file names are sanitised to be terminal-friendly: only
+  `[A-Za-z0-9._-]` survive, and runs of anything else (spaces, parentheses, `&`, etc.)
+  collapse to a single `_`. Subfolder structure is preserved when recursing; the source
+  files are never touched.
+
 ## [0.5.1] - 2026-06-10
 ### Changed
 - Output folders are now named **`FOLDER_bgone`** (no space) instead of `FOLDER _bgone`.
