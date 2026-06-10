@@ -20,7 +20,7 @@ Point it at folders of images and it strips their backgrounds to transparent PNG
 
 ## Features
 - **Bulk multi-folder select** — numbered picklist (`1 3 5-8`, `all`, `0`=this folder), with optional **recurse** into subfolders
-- **Per-folder output** — each `FOLDER` → a sibling `FOLDER _bgone` (subfolder tree mirrored when recursing)
+- **Per-folder output** — each `FOLDER` → a sibling `FOLDER_bgone` (subfolder tree mirrored when recursing)
 - **Loads the model once** and processes N images in parallel ("streams") — one model in RAM
 - **Trim to content** — crop each cutout to the subject's bounding box
 - **Background** — keep it transparent, or composite onto white / black / a custom `#hex`

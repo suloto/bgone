@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.5.0"
+VERSION="0.5.1"
 
 # presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -48,7 +48,7 @@ bgone $VERSION — batch background remover (built on rembg)
   bgone -h | --help      this help
   bgone -V | --version   version
 
-Each source FOLDER's images are written to a sibling "FOLDER _bgone".
+Each source FOLDER's images are written to a sibling "FOLDER_bgone".
 Interactive options: recurse subfolders, model, alpha matting, trim-to-content,
 background (transparent/white/black/#hex), resume-skip, parallel streams. Your last
 choices are remembered in \${XDG_CONFIG_HOME:-\$HOME/.config}/bgone/config.
@@ -218,11 +218,11 @@ if mkdir -p "$(dirname "$CFG")" 2>/dev/null; then
     echo "CFG_FMT=$FMT"; echo "CFG_QUALITY=$QUALITY"; } > "$CFG" 2>/dev/null || true
 fi
 
-# ---- build work list (each FOLDER -> '<name> _bgone' sibling) ------------
+# ---- build work list (each FOLDER -> '<name>_bgone' sibling) -------------
 PAIRS=(); OUTS=(); found=0; skipped=0; declare -A usedout=()
 depth=1; [ "$RECURSE" = on ] && depth=999
 for SRC in "${SRCS[@]}"; do
-  OUT="${SRC} _bgone"; OUTS+=( "$OUT" )
+  OUT="${SRC}_bgone"; OUTS+=( "$OUT" )
   while IFS= read -r f; do
     found=$((found+1)); rel="${f#"$SRC"/}"; out="$OUT/${rel%.*}.$FMT"
     # disambiguate same-name/different-ext collisions (e.g. photo.jpg + photo.png -> keep both)

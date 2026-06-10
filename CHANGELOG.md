@@ -3,6 +3,11 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.5.1] - 2026-06-10
+### Changed
+- Output folders are now named **`FOLDER_bgone`** (no space) instead of `FOLDER _bgone`.
+  The space tripped up downstream tooling and path handling; the name is now space-free.
+
 ## [0.5.0] - 2026-06-10
 ### Changed
 - **Terminal UI polish** — colored Unicode block progress bar (`█`/`─`), `▸` section
