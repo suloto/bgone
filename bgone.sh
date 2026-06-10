@@ -10,10 +10,19 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.4.0"
+VERSION="0.5.0"
 
-B=$'\033[1m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; Rd=$'\033[1;31m'; Dim=$'\033[2m'; Z=$'\033[0m'
-title(){ printf '\n%s%s%s\n' "$G" "$1" "$Z"; }
+# presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  B=$'\033[1m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; Rd=$'\033[1;31m'; Dim=$'\033[2m'; Z=$'\033[0m'
+else
+  B=''; G=''; Y=''; Rd=''; Dim=''; Z=''
+fi
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *[Uu][Tt][Ff]*) GLYPH=1 ;; *) GLYPH=0 ;; esac
+[ -t 1 ] || GLYPH=0
+if [ "$GLYPH" = 1 ]; then TICK='✓'; CROSS='✗'; ARROW='▸'; SEP='·'; BAR_F='█'; BAR_E='─'
+else                     TICK='OK'; CROSS='x'; ARROW='>'; SEP='-'; BAR_F='#'; BAR_E='-'; fi
+title(){ printf '\n%s%s %s%s\n' "$G" "$ARROW" "$1" "$Z"; }
 die(){ printf '%s%s%s\n' "$Rd" "$1" "$Z" >&2; exit 1; }
 
 # ---- locate ourselves + the shared model cache (no runtime deps yet) -----
@@ -239,12 +248,15 @@ total=$todo
 LOG="$(mktemp 2>/dev/null || echo "/tmp/bgone.$$.log")"
 export NBG_MODEL="$MODEL" NBG_STREAMS="$STREAMS" NBG_BG="$BG" NBG_FMT="$FMT" NBG_QUALITY="$QUALITY"
 export NBG_ALPHA="$([ "$ALPHA" = on ] && echo 1 || echo 0)" NBG_TRIM="$([ "$TRIM" = on ] && echo 1 || echo 0)"
-bar(){ local d=$1 cols w pct fill i b=''
+bar(){ local d=$1 cols w pct fill i fb='' eb=''
   cols=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
   w=$(( cols - 58 )); [ "$w" -lt 8 ] && w=8; [ "$w" -gt 44 ] && w=44
   pct=$(( d * 100 / total )); fill=$(( pct * w / 100 ))
-  for ((i=0; i<w; i++)); do [ "$i" -lt "$fill" ] && b+='#' || b+='-'; done
-  printf '\r\033[K[%s] %3d%%  %d/%d · %d.%d/s · ~%ds  %.14s' "$b" "$pct" "$d" "$total" "$(( $2 / 10 ))" "$(( $2 % 10 ))" "$3" "$4"
+  for ((i=0; i<fill; i++)); do fb+="$BAR_F"; done
+  for ((i=fill; i<w; i++)); do eb+="$BAR_E"; done
+  printf '\r\033[K[%s%s%s%s%s] %3d%%  %d/%d %s %d.%d/s %s ~%ds  %s%.14s%s' \
+    "$G" "$fb" "$Z$Dim" "$eb" "$Z" "$pct" "$d" "$total" "$SEP" \
+    "$(( $2 / 10 ))" "$(( $2 % 10 ))" "$SEP" "$3" "$Dim" "$4" "$Z"
 }
 printf '\n%sProcessing%s — model loads once · %s stream(s)\n\n' "$G" "$Z" "$STREAMS"
 START=$(date +%s); n=0
@@ -259,9 +271,9 @@ printf '%s\0' "${PAIRS[@]}" | OMP_NUM_THREADS="$THREADS" "$PYTHON" "$WORKER" 2>>
 dl=$(grep '^__DONE__' "$LOG" 2>/dev/null | tail -1); rest="${dl#__DONE__ }"
 okc="${rest%% *}"; failc="${rest#* }"; [[ "$okc" =~ ^[0-9]+$ ]] || okc=$total; [[ "$failc" =~ ^[0-9]+$ ]] || failc=0
 elapsed=$(( $(date +%s) - START ))
-printf '\n\n%s✓ done%s — %s ok' "$G" "$Z" "$okc"
-[ "$failc" -gt 0 ] && printf '  %s✗ %s failed%s' "$Rd" "$failc" "$Z"
-printf '  ·  %d folder(s)  ·  %ds\n' "${#SRCS[@]}" "$elapsed"
+printf '\n\n%s%s done%s — %s ok' "$G" "$TICK" "$Z" "$okc"
+[ "$failc" -gt 0 ] && printf '  %s%s %s failed%s' "$Rd" "$CROSS" "$failc" "$Z"
+printf '  %s  %d folder(s)  %s  %ds\n' "$SEP" "${#SRCS[@]}" "$SEP" "$elapsed"
 if [ "$failc" -gt 0 ]; then printf '%sfailed:%s\n' "$Rd" "$Z"; grep '^ERR ' "$LOG" 2>/dev/null | sed 's/^ERR /  /' | head -10; fi
 rm -f "$LOG"
 exit 0

@@ -109,6 +109,20 @@ def _encode(im, dst):
         im.save(dst, pf)
 
 
+def _inherit_perms(src, dst):
+    # make outputs as accessible as their source folder, so the cutouts are as
+    # manageable as the originals (e.g. deletable over an open SMB share even when
+    # produced as a different uid inside an unprivileged container).
+    try:
+        os.chmod(os.path.dirname(dst) or ".", os.stat(os.path.dirname(src) or ".").st_mode & 0o7777)
+    except OSError:
+        pass
+    try:
+        os.chmod(dst, os.stat(src).st_mode & 0o7777)
+    except OSError:
+        pass
+
+
 def process(pair):
     src, dst = pair
     with open(src, "rb") as fh:
@@ -119,6 +133,7 @@ def process(pair):
     if FMT == "png" and not TRIM and BGRGBA is None:
         with open(dst, "wb") as fh:
             fh.write(out)
+        _inherit_perms(src, dst)
         return os.path.splitext(os.path.basename(src))[0]
     im = Image.open(BytesIO(out)).convert("RGBA")
     if TRIM:
@@ -135,6 +150,7 @@ def process(pair):
     if FMT in _FLATTEN:
         im = im.convert("RGB")
     _encode(im, dst)
+    _inherit_perms(src, dst)
     return os.path.splitext(os.path.basename(src))[0]
 
 

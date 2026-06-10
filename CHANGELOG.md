@@ -3,6 +3,17 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.5.0] - 2026-06-10
+### Changed
+- **Terminal UI polish** — colored Unicode block progress bar (`█`/`─`), `▸` section
+  headers, and `✓`/`✗` summary glyphs.
+- **Robust everywhere** — color is emitted only on a TTY with `NO_COLOR` unset, and
+  Unicode glyphs only in a UTF-8 locale; otherwise output degrades to clean ASCII
+  (`#`/`-`, `OK`/`x`), so it's safe in pipes, cron logs, and minimal terminals.
+- **Outputs inherit the source folder's permissions** — cutouts are now as manageable
+  as the originals (e.g. deletable over an open SMB share) even when produced as a
+  different uid inside an unprivileged container.
+
 ## [0.4.0] - 2026-06-10
 ### Added
 - **Expanded export formats for VFX/editing.** Beyond png/webp/jpg, the format menu now
