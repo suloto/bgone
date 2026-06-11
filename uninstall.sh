@@ -7,6 +7,8 @@ set -euo pipefail
 PREFIX="${PREFIX:-/opt/bgone}"
 WRAP="/usr/local/bin/bgone"
 COMP="/etc/bash_completion.d/bgone"
+DESKTOP="/usr/share/applications/bgone.desktop"
+ICON="/usr/share/icons/hicolor/256x256/apps/bgone.png"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Please run with sudo — uninstall removes $PREFIX, $WRAP and $COMP." >&2
@@ -22,6 +24,8 @@ echo "bgone uninstall will remove:"
 echo "  $PREFIX            (venv, tool, and any downloaded models)"
 if [ "$rm_wrap" = yes ]; then echo "  $WRAP"; fi
 if [ -f "$COMP" ]; then echo "  $COMP"; fi
+if [ -f "$DESKTOP" ]; then echo "  $DESKTOP"; fi
+if [ -f "$ICON" ]; then echo "  $ICON"; fi
 
 if [ "${1:-}" != "-y" ] && [ "${1:-}" != "--yes" ]; then
   read -rp "Proceed? [y/N]: " ans
@@ -30,6 +34,9 @@ fi
 
 if [ "$rm_wrap" = yes ]; then rm -f "$WRAP"; echo "removed $WRAP"; fi
 if [ -f "$COMP" ]; then rm -f "$COMP"; echo "removed $COMP"; fi
+if [ -f "$DESKTOP" ]; then rm -f "$DESKTOP"; echo "removed $DESKTOP"; fi
+if [ -f "$ICON" ]; then rm -f "$ICON"; echo "removed $ICON"; fi
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 echo "Done — bgone uninstalled. Per-user settings, if any, remain at \"\${XDG_CONFIG_HOME:-\$HOME/.config}/bgone\"."
 # Keep LAST: $PREFIX may hold this very script (the installed copy), and bash reads
 # a script as it runs — deleting it earlier could truncate execution.

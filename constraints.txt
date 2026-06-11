@@ -2,10 +2,13 @@
 # runs install.sh gets identical, known-good versions of the packages that affect
 # bgone's behaviour/output. Used via `pip install -c constraints.txt`.
 # Regenerate deliberately after a vetted rembg bump (and note it in CHANGELOG.md):
-#   /opt/bgone/venv/bin/pip freeze | grep -iE '^(rembg|onnxruntime|numpy|pillow)'
+#   /opt/bgone/venv/bin/pip freeze | grep -iE '^(rembg|onnxruntime|numpy|pillow|pyside6|shiboken6)'
 rembg==2.0.76
 onnxruntime==1.26.0
 onnxruntime-gpu==1.26.0
 numpy==2.4.6
 pillow==12.2.0
 imageio==2.37.3
+# GUI (PySide6/Qt) — only pulled when BGONE_GUI != 0
+PySide6==6.11.1
+shiboken6==6.11.1

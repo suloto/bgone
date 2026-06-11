@@ -3,6 +3,42 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.7.0] - 2026-06-11
+### Added
+- **BiRefNet models** — `birefnet-general-lite` (new default · SOTA quality, ~224 MB),
+  `birefnet-general` (max quality), and `birefnet-portrait` (people/hair) joined the model
+  menu, a big step up in edge/hair quality over U²-Net/ISNet.
+- **Matte output** — a toggle to export the **black-&-white mask** instead of the cutout
+  (for compositing), and a **greenscreen** background preset (`green` → chroma key).
+- **Edge cleanup** — **Feather** (soften the mask edge) and **Shrink** (erode to kill the
+  white halo) controls, in px.
+- **Graphical version (PySide6/Qt).** A second front-end alongside the terminal tool —
+  `bgone --gui`, plus a desktop launcher / app-menu icon. Dark, modern UI: pick whole
+  folders (per-folder image counts + multi-select) **or individual images**, with
+  model/format/background/quality/streams
+  controls, alpha-matting / trim / resume toggles, a live progress bar with rate + ETA, and
+  a **large preview pane with a draggable before/after split slider**: the cutout renders
+  **on demand** when you pick an image (current settings), so you can judge it *before*
+  committing to the full export — drag the handle to compare (full-left = cutout,
+  full-right = original). Plus a clickable results filmstrip —
+  each cutout rendered on a transparency checkerboard, with
+  [Iconoir](https://iconoir.com) icons throughout. It reuses
+  `bgone-worker.py` unchanged and shares settings with the terminal version via
+  `~/.config/bgone/config`, so the two stay in lock-step. Installed by default;
+  `BGONE_GUI=0 ./install.sh` keeps a terminal-only (headless/server) install.
+
+### Changed
+- **Output folder is now created *inside* each source folder** (`FOLDER/FOLDER_bgone/…`)
+  instead of as a sibling (`FOLDER_bgone/` next to it), so cutouts live with the images
+  they came from. Recursive scans skip any `*_bgone` folder, so re-runs never reprocess a
+  previous run's output.
+- **Installer now requires Python ≥3.11 and auto-selects a suitable interpreter.** It
+  prefers the parallel-installable `python3.12`/`3.11` on RHEL/Rocky/Alma 9 (whose default
+  `python3` is 3.9), leaving the system Python untouched, and rebuilds a venv that was
+  created with an unsupported Python. Clear `dnf`/`apt` hint if none is present.
+  (rembg/numpy/onnxruntime dropped 3.9/3.10 upstream, so the previous "Python 3.9+" claim
+  was incorrect.)
+
 ## [0.6.0] - 2026-06-10
 ### Changed
 - Output folder **and** file names are sanitised to be terminal-friendly: only

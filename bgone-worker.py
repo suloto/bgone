@@ -9,16 +9,19 @@ Env:
   NBG_ALPHA    "1" enable alpha matting                [0]
   NBG_STREAMS  images processed at once (threads)      [4]
   NBG_TRIM     "1" crop to the subject's bounding box  [0]
-  NBG_BG       transparent | white | black | #RRGGBB   [transparent]
+  NBG_BG       transparent | white | black | green | #RRGGBB  [transparent]
   NBG_FMT      png webp jpg tiff tga bmp avif jp2 dds exr hdr dpx  [png]
   NBG_QUALITY  1-100 quality for lossy jpg/webp/avif   [90]
+  NBG_MATTE    "1" output the B&W mask, not the cutout [0]
+  NBG_FEATHER  px: soften the mask edge                [0]
+  NBG_SHRINK   px: erode the mask to kill a halo       [0]
 """
 import os
 import sys
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from PIL import Image
+from PIL import Image, ImageFilter
 from rembg import remove, new_session
 
 MODEL   = os.environ.get("NBG_MODEL", "isnet-anime")
@@ -28,10 +31,19 @@ TRIM    = os.environ.get("NBG_TRIM", "0") == "1"
 BG      = os.environ.get("NBG_BG", "transparent").strip().lower()
 FMT     = os.environ.get("NBG_FMT", "png").strip().lower()
 FMT     = {"jpeg": "jpg", "tif": "tiff", "j2k": "jp2", "jpeg2000": "jp2"}.get(FMT, FMT)
+MATTE   = os.environ.get("NBG_MATTE", "0") == "1"   # output the B&W mask instead of the cutout
 try:
     QUALITY = max(1, min(100, int(os.environ.get("NBG_QUALITY", "90"))))
 except ValueError:
     QUALITY = 90
+try:
+    FEATHER = max(0, int(os.environ.get("NBG_FEATHER", "0")))   # px: soften the mask edge
+except ValueError:
+    FEATHER = 0
+try:
+    SHRINK = max(0, int(os.environ.get("NBG_SHRINK", "0")))     # px: erode the mask (kill halo)
+except ValueError:
+    SHRINK = 0
 
 _PIL_FMT = {"png": "PNG", "webp": "WEBP", "jpg": "JPEG", "tiff": "TIFF", "tga": "TGA",
             "bmp": "BMP", "avif": "AVIF", "jp2": "JPEG2000", "dds": "DDS"}
@@ -47,6 +59,8 @@ def _bg_rgba():
         return (255, 255, 255, 255)
     if BG == "black":
         return (0, 0, 0, 255)
+    if BG == "green":
+        return (0, 177, 64, 255)        # chroma-key green for keying later
     if len(BG) == 7 and BG[0] == "#":
         try:
             return (int(BG[1:3], 16), int(BG[3:5], 16), int(BG[5:7], 16), 255)
@@ -89,6 +103,21 @@ def _make_session():
 
 session = _make_session()
 
+# Make freshly-downloaded models world-readable so the SHARED cache works for every
+# user. rembg writes downloads as 0600, which would lock other accounts out of a
+# common cache dir (e.g. /opt/bgone/models). Best-effort; only touches files we own.
+try:
+    _md = os.environ.get("U2NET_HOME")
+    if _md and os.path.isdir(_md):
+        for _f in os.listdir(_md):
+            if _f.endswith(".onnx"):
+                try:
+                    os.chmod(os.path.join(_md, _f), 0o644)
+                except OSError:
+                    pass
+except Exception:
+    pass
+
 
 def _encode(im, dst):
     """Encode an RGBA (or RGB, if flattened) PIL image to the chosen output format."""
@@ -129,17 +158,32 @@ def process(pair):
         data = fh.read()
     out = remove(data, session=session, alpha_matting=ALPHA)
     os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
-    # fast path: plain PNG with no trim/bg edits -> write rembg's bytes verbatim
-    if FMT == "png" and not TRIM and BGRGBA is None:
+    # fast path: plain PNG cutout with NO pixel edits -> write rembg's bytes verbatim
+    if (FMT == "png" and not TRIM and BGRGBA is None
+            and not MATTE and not FEATHER and not SHRINK):
         with open(dst, "wb") as fh:
             fh.write(out)
         _inherit_perms(src, dst)
         return os.path.splitext(os.path.basename(src))[0]
     im = Image.open(BytesIO(out)).convert("RGBA")
+    if SHRINK or FEATHER:                          # edge cleanup on the alpha
+        a = im.getchannel("A")
+        if SHRINK:
+            a = a.filter(ImageFilter.MinFilter(2 * SHRINK + 1))   # erode -> kills white halo
+        if FEATHER:
+            a = a.filter(ImageFilter.GaussianBlur(FEATHER))       # soften the edge
+        im.putalpha(a)
     if TRIM:
         bbox = im.getchannel("A").getbbox()       # tight box around non-transparent pixels
         if bbox:
             im = im.crop(bbox)
+    if MATTE:                                      # output the B&W mask, not the cutout
+        m = im.getchannel("A").convert("L")
+        if FMT in ("webp", "avif", "dds", "jp2", "tga"):
+            m = m.convert("RGB")                   # these don't take single-channel grayscale
+        _encode(m, dst)
+        _inherit_perms(src, dst)
+        return os.path.splitext(os.path.basename(src))[0]
     bg = BGRGBA
     if FMT in _FLATTEN and bg is None:
         bg = (255, 255, 255, 255)                 # no alpha channel -> must flatten

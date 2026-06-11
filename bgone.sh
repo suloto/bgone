@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.6.0"
+VERSION="0.7.0"
 
 # presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -44,11 +44,12 @@ bgone $VERSION — batch background remover (built on rembg)
 
   bgone                  interactive: pick folder(s), model, options
   bgone DIR [DIR ...]    process these folder(s) directly
+  bgone --gui            launch the graphical version (PySide6/Qt)
   bgone --verify-models  check cached model weights vs the shipped SHA-256 manifest
   bgone -h | --help      this help
   bgone -V | --version   version
 
-Each source FOLDER's images go to a sibling "FOLDER_bgone"; output folder + file
+Each source FOLDER's images go to a "FOLDER_bgone" folder inside it; output folder + file
 names are sanitised to be terminal-friendly (spaces/specials -> _).
 Interactive options: recurse subfolders, model, alpha matting, trim-to-content,
 background (transparent/white/black/#hex), resume-skip, parallel streams. Your last
@@ -86,12 +87,13 @@ PYTHON="$(dirname "$REMBG")/python"; [ -x "$PYTHON" ] || PYTHON="python3"
 
 # ---- remembered defaults -------------------------------------------------
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}/bgone/config"
-CFG_MODEL=2; CFG_STREAMS=4; CFG_ALPHA=off; CFG_TRIM=off; CFG_BG=transparent; CFG_SKIP=on
-CFG_FMT=png; CFG_QUALITY=90
+CFG_MODEL=1; CFG_STREAMS=4; CFG_ALPHA=off; CFG_TRIM=off; CFG_BG=transparent; CFG_SKIP=on
+CFG_FMT=png; CFG_QUALITY=90; CFG_MATTE=off; CFG_FEATHER=0; CFG_SHRINK=0
 # shellcheck source=/dev/null
 [ -f "$CFG" ] && . "$CFG" 2>/dev/null || true
 
 printf '\n%sbgone%s %s— batch background remover · model loads once%s\n' "$B" "$Z" "$Dim" "$Z"
+[ -t 1 ] && [ -f "$BGONE_HOME/bgone-gui.py" ] && printf '%stip: run "bgone --gui" for the graphical version%s\n' "$Dim" "$Z"
 
 # ---- step 1: source folders ----------------------------------------------
 SRCS=()
@@ -143,10 +145,13 @@ IFS= read -rp "Include images in subfolders (recurse)? [y/N]: " rc; RECURSE=off;
 
 # ---- step 2: model -------------------------------------------------------
 title "Model"
-models=(u2net isnet-anime isnet-general-use u2netp silueta)
-declare -A mdesc=( [u2net]="photos / realistic / 3D" [isnet-anime]="anime / illustration" \
-                   [isnet-general-use]="general purpose" [u2netp]="lightweight, faster" [silueta]="u2net quality, smaller" )
-declare -A msize=( [u2net]="168MB" [isnet-anime]="168MB" [isnet-general-use]="170MB" [u2netp]="4MB" [silueta]="43MB" )
+models=(birefnet-general-lite u2net isnet-general-use isnet-anime birefnet-general birefnet-portrait u2netp silueta)
+declare -A mdesc=( [birefnet-general-lite]="photos / SOTA (recommended)" [birefnet-general]="photos / max quality" \
+                   [birefnet-portrait]="people / hair" [u2net]="photos / realistic / 3D" \
+                   [isnet-general-use]="general purpose" [isnet-anime]="anime / illustration" \
+                   [u2netp]="lightweight, faster" [silueta]="u2net quality, smaller" )
+declare -A msize=( [birefnet-general-lite]="~224MB" [birefnet-general]="~900MB" [birefnet-portrait]="~900MB" \
+                   [u2net]="168MB" [isnet-general-use]="170MB" [isnet-anime]="168MB" [u2netp]="4MB" [silueta]="43MB" )
 # sanitize remembered model choice — the config is user-editable; a bad value must
 # not crash the unguarded array index below under `set -u`.
 [[ "$CFG_MODEL" =~ ^[0-9]+$ ]] && [ "$CFG_MODEL" -ge 1 ] && [ "$CFG_MODEL" -le "${#models[@]}" ] || CFG_MODEL=1
@@ -168,6 +173,15 @@ td="[y/N]"; [ "$CFG_TRIM" = on ] && td="[Y/n]"
 IFS= read -rp "Trim to content? (crop transparent margins) $td: " t
 TRIM="$CFG_TRIM"; [[ "$t" =~ ^[Yy] ]] && TRIM=on; [[ "$t" =~ ^[Nn] ]] && TRIM=off
 
+md="[y/N]"; [ "$CFG_MATTE" = on ] && md="[Y/n]"
+IFS= read -rp "Output the B&W mask instead of the cutout? $md: " mt
+MATTE="$CFG_MATTE"; [[ "$mt" =~ ^[Yy] ]] && MATTE=on; [[ "$mt" =~ ^[Nn] ]] && MATTE=off
+
+IFS= read -rp "Feather edge — soften, px [${CFG_FEATHER}]: " fe; FEATHER="${fe:-$CFG_FEATHER}"
+[[ "$FEATHER" =~ ^[0-9]+$ ]] || FEATHER=0
+IFS= read -rp "Shrink edge — kill halo, px [${CFG_SHRINK}]: " sh; SHRINK="${sh:-$CFG_SHRINK}"
+[[ "$SHRINK" =~ ^[0-9]+$ ]] || SHRINK=0
+
 printf '%sFormats:%s alpha = png webp tiff tga dds jp2 avif · flat = jpg bmp · float/VFX = exr hdr dpx\n' "$Dim" "$Z"
 IFS= read -rp "Output format [${CFG_FMT}]: " fmtin
 FMT="${fmtin:-$CFG_FMT}"; FMT="${FMT,,}"
@@ -183,10 +197,10 @@ case "$FMT" in
     [[ "$QUALITY" =~ ^[0-9]+$ ]] && [ "$QUALITY" -ge 1 ] && [ "$QUALITY" -le 100 ] || QUALITY="$CFG_QUALITY" ;;
 esac
 
-IFS= read -rp "Background — transparent / white / #hex [${CFG_BG}]: " bgin
+IFS= read -rp "Background — transparent / white / black / green / #hex [${CFG_BG}]: " bgin
 BG="${bgin:-$CFG_BG}"
 case "$BG" in
-  transparent|white|black) ;;
+  transparent|white|black|green) ;;
   \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
   *) BG=transparent ;;
 esac
@@ -216,10 +230,11 @@ THREADS=$(( NPROC / STREAMS )); [ "$THREADS" -lt 1 ] && THREADS=1
 if mkdir -p "$(dirname "$CFG")" 2>/dev/null; then
   { echo "CFG_MODEL=$mi"; echo "CFG_STREAMS=$STREAMS"; echo "CFG_ALPHA=$ALPHA"
     echo "CFG_TRIM=$TRIM"; echo "CFG_BG=$BG"; echo "CFG_SKIP=$SKIP"
-    echo "CFG_FMT=$FMT"; echo "CFG_QUALITY=$QUALITY"; } > "$CFG" 2>/dev/null || true
+    echo "CFG_FMT=$FMT"; echo "CFG_QUALITY=$QUALITY"; echo "CFG_MATTE=$MATTE"
+    echo "CFG_FEATHER=$FEATHER"; echo "CFG_SHRINK=$SHRINK"; } > "$CFG" 2>/dev/null || true
 fi
 
-# ---- build work list (each FOLDER -> '<name>_bgone' sibling) -------------
+# ---- build work list (each FOLDER -> a '<name>_bgone' subfolder INSIDE it) -----
 # Output folder + file names are sanitised to be terminal-friendly: only
 # [A-Za-z0-9._-] survive, runs of anything else collapse to a single '_'.
 PAIRS=(); OUTS=(); found=0; skipped=0; declare -A usedout=()
@@ -227,7 +242,7 @@ depth=1; [ "$RECURSE" = on ] && depth=999
 for SRC in "${SRCS[@]}"; do
   ob="${SRC##*/}"; ob="${ob//[!A-Za-z0-9._-]/_}"          # terminal-safe output folder name
   while [[ "$ob" == *__* ]]; do ob="${ob//__/_}"; done; ob="${ob#_}"; ob="${ob%_}"
-  OUT="${SRC%/*}/${ob:-x}_bgone"; OUTS+=( "$OUT" )
+  OUT="${SRC%/}/${ob:-x}_bgone"; OUTS+=( "$OUT" )         # inside the source folder
   while IFS= read -r f; do
     found=$((found+1)); rel="${f#"$SRC"/}"; stem="${rel%.*}"; ext="${rel##*.}"
     san=""; IFS='/' read -ra _seg <<< "$stem"            # sanitise each path segment (keeps subfolders on recurse)
@@ -241,7 +256,7 @@ for SRC in "${SRCS[@]}"; do
     usedout["$out"]=1
     if [ "$SKIP" = on ] && [ -f "$out" ]; then skipped=$((skipped+1)); continue; fi
     PAIRS+=( "$f" "$out" )
-  done < <(find "$SRC" -maxdepth "$depth" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) 2>/dev/null)
+  done < <(find "$SRC" -maxdepth "$depth" \( -type d -name '*_bgone' -prune \) -o -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -print 2>/dev/null)
 done
 todo=$(( ${#PAIRS[@]} / 2 ))
 [ "$found" -gt 0 ] || die "No images (jpg/jpeg/png/webp) found in the selected folder(s)."
@@ -259,6 +274,7 @@ total=$todo
 LOG="$(mktemp 2>/dev/null || echo "/tmp/bgone.$$.log")"
 export NBG_MODEL="$MODEL" NBG_STREAMS="$STREAMS" NBG_BG="$BG" NBG_FMT="$FMT" NBG_QUALITY="$QUALITY"
 export NBG_ALPHA="$([ "$ALPHA" = on ] && echo 1 || echo 0)" NBG_TRIM="$([ "$TRIM" = on ] && echo 1 || echo 0)"
+export NBG_MATTE="$([ "$MATTE" = on ] && echo 1 || echo 0)" NBG_FEATHER="$FEATHER" NBG_SHRINK="$SHRINK"
 bar(){ local d=$1 cols w pct fill i fb='' eb=''
   cols=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
   w=$(( cols - 58 )); [ "$w" -lt 8 ] && w=8; [ "$w" -gt 44 ] && w=44
