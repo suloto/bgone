@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.7.0"
+VERSION="0.7.1"
 
 # presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then

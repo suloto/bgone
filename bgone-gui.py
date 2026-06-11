@@ -875,7 +875,6 @@ class Bgone(QWidget):
         self.fmt.currentTextChanged.connect(self._invalidate_preview)
         self.bg.currentTextChanged.connect(self._invalidate_preview)
         self.alpha.toggled.connect(self._invalidate_preview)
-        self.trim.toggled.connect(self._invalidate_preview)
         self.matte.toggled.connect(self._invalidate_preview)
         self.feather.valueChanged.connect(self._invalidate_preview)
         self.shrink.valueChanged.connect(self._invalidate_preview)
@@ -1111,8 +1110,9 @@ class Bgone(QWidget):
             self.caption.setText("")
 
     def _pv_key(self, src):
+        # NB: trim is intentionally excluded — the preview never trims (see _render_preview)
         return (src, MODELS[self.model.currentIndex()][0], self._bg_value(),
-                self.alpha.isChecked(), self.trim.isChecked(), self.fmt.currentText(),
+                self.alpha.isChecked(), self.fmt.currentText(),
                 self.matte.isChecked(), self.feather.value(), self.shrink.value())
 
     def _auto_render(self):
@@ -1152,7 +1152,7 @@ class Bgone(QWidget):
         env.insert("NBG_FMT", pvfmt)
         env.insert("NBG_QUALITY", str(self.quality.value()))
         env.insert("NBG_ALPHA", "1" if self.alpha.isChecked() else "0")
-        env.insert("NBG_TRIM", "1" if self.trim.isChecked() else "0")
+        env.insert("NBG_TRIM", "0")   # never trim the preview — keeps the before/after split aligned
         env.insert("NBG_MATTE", "1" if self.matte.isChecked() else "0")
         env.insert("NBG_FEATHER", str(self.feather.value()))
         env.insert("NBG_SHRINK", str(self.shrink.value()))

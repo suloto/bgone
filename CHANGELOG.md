@@ -3,6 +3,13 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.7.1] - 2026-06-11
+### Fixed
+- **Trim no longer breaks the before/after split slider in the GUI.** Trim crops the cutout
+  to a smaller canvas, which misaligned it against the full-size original in the split view.
+  The preview now always renders without trim (it only crops already-transparent margins, so
+  the comparison is identical), while exports still honour the Trim setting.
+
 ## [0.7.0] - 2026-06-11
 ### Added
 - **BiRefNet models** — `birefnet-general-lite` (new default · SOTA quality, ~224 MB),
