@@ -3,6 +3,14 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.7.2] - 2026-06-11
+### Fixed
+- **Trim to content is now reflected in the GUI preview.** 0.7.1 fixed the split-slider
+  misalignment by skipping trim in the preview — which made it look like trim no longer
+  cropped. The preview now crops *both* the original and the cutout to the subject's
+  bounding box, so the split stays aligned **and** shows the trimmed framing. (Exports
+  always cropped; this was preview-only.)
+
 ## [0.7.1] - 2026-06-11
 ### Fixed
 - **Trim no longer breaks the before/after split slider in the GUI.** Trim crops the cutout

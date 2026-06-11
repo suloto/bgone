@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox,
                                QScrollArea, QSizePolicy, QSlider, QSpinBox,
                                QVBoxLayout, QWidget)
 
-VERSION = "0.7.0"
+VERSION = "0.7.2"
 
 # ---- catalogue (kept in lock-step with bgone.sh) ----------------------------
 MODELS = [
@@ -332,14 +332,17 @@ def thumb_pixmap(path):
     return tile
 
 
-def render_fit(path, w, h, checker):
+def render_fit(path, w, h, checker, crop=None):
     """Scale an image to fit w×h (keeping aspect) and composite it: cutouts onto a
-    transparency checkerboard, source images onto a flat dark panel."""
+    transparency checkerboard, source images onto a flat dark panel. `crop` (a bbox)
+    trims both sides of a comparison to the same region (used for Trim-to-content)."""
     try:
         from PIL import Image
         im = Image.open(path).convert("RGBA")
     except Exception:
         return None
+    if crop:
+        im = im.crop(crop)
     im.thumbnail((max(16, w), max(16, h)))
     data = im.tobytes("raw", "RGBA")
     qi = QImage(data, im.width, im.height, QImage.Format_RGBA8888).copy()
@@ -354,6 +357,18 @@ def render_fit(path, w, h, checker):
     p.drawRect(0, 0, im.width - 1, im.height - 1)
     p.end()
     return canvas
+
+
+def _crop_bbox(path):
+    """Bounding box of the subject (alpha for a cutout, luminance for a matte) — used to
+    crop a comparison to the trimmed region so both sides line up."""
+    try:
+        from PIL import Image
+        im = Image.open(path)
+        a = im.getchannel("A") if "A" in im.getbands() else im.convert("L")
+        return a.getbbox()
+    except Exception:
+        return None
 
 
 class ClickableLabel(QLabel):
@@ -423,9 +438,11 @@ class ComparePreview(QWidget):
         self._message = None
         self._cache = {}
         self._img_rect = None
+        self._crop = None            # bbox to crop both sides to (Trim-to-content)
 
     def set_single(self, path, checker):
         self._message = None
+        self._crop = None
         if checker:
             self._after = path
             self._view = "after"
@@ -436,9 +453,10 @@ class ComparePreview(QWidget):
         self.setCursor(Qt.ArrowCursor)
         self.update()
 
-    def set_compare(self, before, after):
+    def set_compare(self, before, after, crop=None):
         self._message = None
         self._before, self._after, self._view = before, after, "split"
+        self._crop = crop
         self._cache.clear()
         self.setCursor(Qt.SplitHCursor)
         self.update()
@@ -451,6 +469,7 @@ class ComparePreview(QWidget):
     def clear_preview(self):
         self._before = self._after = self._message = None
         self._view = "after"
+        self._crop = None
         self._cache.clear()
         self.setCursor(Qt.ArrowCursor)
         self.update()
@@ -465,7 +484,7 @@ class ComparePreview(QWidget):
             return self._cache[which]
         path = self._before if which == "before" else self._after
         pm = (render_fit(path, max(60, self.width() - 10), max(60, self.height() - 10),
-                         checker=(which == "after")) if path else None)
+                         checker=(which == "after"), crop=self._crop) if path else None)
         self._cache[which] = pm
         return pm
 
@@ -876,6 +895,7 @@ class Bgone(QWidget):
         self.bg.currentTextChanged.connect(self._invalidate_preview)
         self.alpha.toggled.connect(self._invalidate_preview)
         self.matte.toggled.connect(self._invalidate_preview)
+        self.trim.toggled.connect(lambda *_: self._apply_preview())   # re-crop preview, no re-render
         self.feather.valueChanged.connect(self._invalidate_preview)
         self.shrink.valueChanged.connect(self._invalidate_preview)
 
@@ -1100,7 +1120,8 @@ class Bgone(QWidget):
     def _apply_preview(self):
         have_out = self._preview_out and os.path.exists(self._preview_out)
         if self._preview_src and have_out:
-            self.preview.set_compare(self._preview_src, self._preview_out)
+            crop = _crop_bbox(self._preview_out) if self.trim.isChecked() else None
+            self.preview.set_compare(self._preview_src, self._preview_out, crop)
             self.caption.setText("before ⇄ after · " + os.path.basename(self._preview_src))
         elif self._preview_src:
             self.preview.set_single(self._preview_src, checker=False)
