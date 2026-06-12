@@ -1,0 +1,49 @@
+# Template — build-rpm.sh substitutes @VERSION@ and @STAGE@ and runs rpmbuild.
+# The whole /opt/bgone tree (a vendored, relocatable Python 3.12 + all deps) is excluded
+# from automatic dependency generation, so the package has ZERO Python requires and never
+# installs or upgrades the system Python. Only non-Python GUI libs are required.
+%global __requires_exclude_from ^/opt/bgone/.*$
+%global __provides_exclude_from ^/opt/bgone/.*$
+%global debug_package %{nil}
+%global __brp_mangle_shebangs %{nil}
+%global __brp_python_bytecompile %{nil}
+%global __os_install_post %{nil}
+
+Name:           bgone
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Batch image background remover (self-contained: bundled Python + Qt GUI)
+License:        MIT
+URL:            https://github.com/suloto/bgone
+BuildArch:      x86_64
+AutoReqProv:    no
+Requires:       fontconfig
+Requires:       mesa-libGL
+Requires:       libxkbcommon-x11
+Requires:       xcb-util-cursor
+
+%description
+bgone strips image backgrounds in bulk (built on rembg). This package bundles its OWN
+Python 3.12 runtime and all dependencies under /opt/bgone, so it never installs or
+modifies the system Python. Provides the `bgone` terminal command and a Qt GUI
+(`bgone --gui`, also in the desktop app menu). Model weights download on first use.
+
+%install
+rm -rf %{buildroot}; mkdir -p %{buildroot}
+cp -a @STAGE@/* %{buildroot}/
+
+%post
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
+
+%files
+/opt/bgone
+%attr(1777,root,root) %dir /opt/bgone/models
+/usr/bin/bgone
+/usr/share/applications/bgone.desktop
+/usr/share/icons/hicolor/256x256/apps/bgone.png
+/etc/bash_completion.d/bgone
+
+%changelog
+* Fri Jun 12 2026 suloto <suloto@users.noreply.github.com> - @VERSION@-1
+- Self-contained RPM: bundled Python 3.12 + deps under /opt/bgone; no system Python touched.

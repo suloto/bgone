@@ -37,7 +37,18 @@ resumes where it left off.
 - **GPU-ready** — uses a hardware execution provider if onnxruntime exposes one, else CPU
 - Models: **`birefnet-general-lite`** (default · SOTA quality), `birefnet-general`, `birefnet-portrait`, `u2net`, `isnet-general-use`, `isnet-anime`, `u2netp`, `silueta`
 
-## Install
+## Install (RPM — self-contained, RHEL/Rocky/Alma 9)
+Grab `bgone-<version>-1.*.x86_64.rpm` from the [Releases](https://github.com/suloto/bgone/releases) page and:
+```bash
+sudo dnf install ./bgone-0.7.2-1.el9.x86_64.rpm
+```
+This package **bundles its own Python 3.12 + all dependencies** under `/opt/bgone`, so it
+**never installs or upgrades the system Python** (zero Python requires — only a few standard
+GUI libraries). You get the `bgone` command and the GUI in your app menu; remove it any time
+with `sudo dnf remove bgone`. Rebuild the RPM yourself with [`packaging/build-rpm.sh`](packaging/build-rpm.sh).
+Model weights still download on first use.
+
+## Install (script — any Linux)
 **Requirements:** Linux, **Python 3.11+**, and `sudo`. (RHEL/Rocky/Alma 9 default to Python 3.9 — install a newer one with `sudo dnf install -y python3.12`; Debian/Ubuntu may need `python3.12-venv`/`python3.11-venv`.) The installer auto-selects the newest suitable Python on the box, or pass `PYTHON=/path/to/python3.12 sudo -E ./install.sh`.
 ```bash
 sudo ./install.sh                 # installs to /opt/bgone
