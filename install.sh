@@ -129,13 +129,13 @@ mkdir -p "$PREFIX/models"
 chmod 1777 "$PREFIX/models"
 
 # ---- `bgone` launcher --------------------------------------------------------
-#   no args / -h/--help / -V/--version / --verify-models / a directory -> the tool
+#   no args / -h/--help / -V/--version / --verify-models / --check-updates / a directory -> the tool
 #   -g/--gui/gui -> the Qt GUI ; --uninstall -> uninstaller ; i|p|s|b|d -> rembg CLI
 cat > "$WRAP" <<EOF
 #!/usr/bin/env bash
 export U2NET_HOME="\${U2NET_HOME:-$PREFIX/models}"
 case "\${1:-}" in
-  ""|-h|--help|-V|--version|--verify-models) exec "$PREFIX/bgone.sh" "\$@" ;;
+  ""|-h|--help|-V|--version|--verify-models|--check-updates) exec "$PREFIX/bgone.sh" "\$@" ;;
   -g|--gui|gui)              exec "$PREFIX/venv/bin/python" "$PREFIX/bgone-gui.py" "\${@:2}" ;;
   --uninstall)               exec "$PREFIX/uninstall.sh" "\${@:2}" ;;
   i|p|s|b|d)                 exec "$PREFIX/venv/bin/rembg" "\$@" ;;

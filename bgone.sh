@@ -10,7 +10,7 @@
 #   bgone -V | --version
 #
 set -uo pipefail
-VERSION="0.7.2"
+VERSION="0.8.0"
 
 # presentation: colour only on a TTY without NO_COLOR; Unicode glyphs only in a UTF-8 locale
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -46,6 +46,7 @@ bgone $VERSION — batch background remover (built on rembg)
   bgone DIR [DIR ...]    process these folder(s) directly
   bgone --gui            launch the graphical version (PySide6/Qt)
   bgone --verify-models  check cached model weights vs the shipped SHA-256 manifest
+  bgone --check-updates  check PyPI for newer versions of bgone's pinned dependencies
   bgone -h | --help      this help
   bgone -V | --version   version
 
@@ -75,6 +76,83 @@ EOF
     if [ "$rc" -ne 0 ]; then printf '%sWARNING: a model failed checksum — possibly corrupt or tampered.%s\n' "$Rd" "$Z" >&2
     else echo "Verified $present present model(s); no mismatches."; fi
     exit "$rc" ;;
+  --check-updates)
+    CON="$BGONE_HOME/constraints.txt"; [ -f "$CON" ] || CON="/opt/bgone/constraints.txt"
+    [ -f "$CON" ] || die "constraints.txt not found (looked in $BGONE_HOME and /opt/bgone)."
+    CUPY="$BGONE_HOME/venv/bin/python"; [ -x "$CUPY" ] || CUPY="/opt/bgone/venv/bin/python"
+    [ -x "$CUPY" ] || CUPY="$(command -v python3 || true)"
+    [ -n "$CUPY" ] || die "Need python3 (or the bgone venv) to check for updates."
+    "$CUPY" - "$CON" <<'PYEOF'
+import json, os, sys
+from urllib.request import urlopen, Request
+
+con = sys.argv[1]
+tty = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+G = "\033[1;32m" if tty else ""; Y = "\033[1;33m" if tty else ""
+R = "\033[1;31m" if tty else ""; D = "\033[2m" if tty else ""; Z = "\033[0m" if tty else ""
+
+try:
+    from importlib.metadata import version as _iv
+except Exception:
+    _iv = None
+
+def installed(name):
+    try:
+        return _iv(name) if _iv else None
+    except Exception:
+        return None
+
+def vtuple(s):                       # lenient numeric compare (2.0.76 -> (2,0,76))
+    out = []
+    for part in str(s).split("."):
+        d = "".join(c for c in part if c.isdigit())
+        out.append(int(d) if d else 0)
+    return tuple(out)
+
+def latest(name):
+    req = Request("https://pypi.org/pypi/%s/json" % name,
+                  headers={"User-Agent": "bgone-check-updates"})
+    with urlopen(req, timeout=15) as r:
+        return json.load(r)["info"]["version"]
+
+pins = []
+with open(con) as fh:
+    for line in fh:
+        line = line.split("#", 1)[0].strip()
+        if "==" in line:
+            n, v = line.split("==", 1)
+            pins.append((n.strip(), v.strip()))
+
+if not pins:
+    print("No pinned packages found in %s" % con); sys.exit(0)
+
+print("Checking PyPI for newer versions than bgone's pins (%s):\n" % con)
+print("  %-17s %-11s %-11s %-11s %s" % ("package", "pinned", "installed", "latest", "status"))
+updates = errors = 0
+for name, pinned in pins:
+    inst = installed(name)
+    try:
+        lat = latest(name)
+    except Exception:
+        print("  %-17s %-11s %-11s %s%s%s" % (name, pinned, inst or "-", R, "check failed", Z))
+        errors += 1; continue
+    if vtuple(lat) > vtuple(pinned):
+        st = "%sUPDATE%s" % (Y, Z); updates += 1
+    else:
+        st = "%sok%s" % (G, Z)
+    print("  %-17s %-11s %-11s %-11s %s" % (name, pinned, inst or "-", lat, st))
+
+print()
+if updates:
+    print("%s%d update(s) available.%s Bump the pin in constraints.txt, `pip install -U <pkg>`, "
+          "note it in CHANGELOG.md, then commit." % (Y, updates, Z))
+elif errors:
+    print("%sChecked pins are current, but %d package(s) could not be reached.%s" % (D, errors, Z))
+else:
+    print("%sAll pinned dependencies are current.%s" % (G, Z))
+sys.exit(1 if updates else 0)
+PYEOF
+    exit $? ;;
 esac
 
 # ---- locate the rembg runtime (required for processing from here on) -----

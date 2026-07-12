@@ -3,6 +3,18 @@
 All notable changes to bgone are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com); versioning: [SemVer](https://semver.org).
 
+## [0.8.0] - 2026-07-12
+### Added
+- **`bgone --check-updates`** — queries PyPI for newer releases of bgone's pinned
+  dependencies (rembg, onnxruntime, numpy, Pillow, imageio, PySide6, …) from
+  `constraints.txt`, and reports which pins have an upstream update — so keeping the
+  rembg base current is a one-liner. Shows pinned / installed / latest side by side,
+  works without the rembg runtime, and exits non-zero when updates exist (handy in CI).
+### Changed
+- Bumped the **Pillow** pin 12.2.0 → 12.3.0 (within rembg's `>=12.1,<13` range; picks up
+  upstream fixes). numpy stays at 2.4.x (numba 0.65.1 caps it at `<2.5`) and onnxruntime
+  stays 1.26.0.
+
 ## [0.7.2] - 2026-06-11
 ### Fixed
 - **Trim to content is now reflected in the GUI preview.** 0.7.1 fixed the split-slider
